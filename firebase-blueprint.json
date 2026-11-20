@@ -1,0 +1,179 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized librarian or system administrator.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 254 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["super_admin", "staff"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "name", "role", "createdAt", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Registered library member managed by administrators.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "phone": { "type": "string", "minLength": 5, "maxLength": 32 },
+        "membershipType": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "membershipExpiry": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "status": { "type": "string", "enum": ["active", "blocked"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "phone", "membershipType", "membershipExpiry", "status", "createdAt", "updatedAt"]
+    },
+    "Floor": {
+      "title": "Floor",
+      "description": "Library floor canvas dimensions and layout version.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "widthPx": { "type": "number" },
+        "heightPx": { "type": "number" },
+        "layoutVersion": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "widthPx", "heightPx", "layoutVersion", "updatedAt"]
+    },
+    "Seat": {
+      "title": "Seat",
+      "description": "Individual seat or structural element placed on a floor plan.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "floorId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "seatCode": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "shape": { "type": "string", "enum": ["desk", "wall", "door", "pillar"] },
+        "categoryId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "status": { "type": "string", "enum": ["active", "maintenance"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "floorId", "seatCode", "x", "y", "shape", "categoryId", "status", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Seat tier with display color and booking price.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "colorHex": { "type": "string", "minLength": 7, "maxLength": 7, "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "price": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "colorHex", "price", "createdAt", "updatedAt"]
+    },
+    "TimeSlot": {
+      "title": "TimeSlot",
+      "description": "Bookable daily time slot for library seats.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "startTime": { "type": "string", "minLength": 5, "maxLength": 5, "pattern": "^\\d{2}:\\d{2}$" },
+        "endTime": { "type": "string", "minLength": 5, "maxLength": 5, "pattern": "^\\d{2}:\\d{2}$" },
+        "price": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "startTime", "endTime", "createdAt", "updatedAt"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Admin-issued seat reservation for a student on a specific date and slot.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "seatId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "floorId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slotId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingDate": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "amount": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["paid", "pending"] },
+        "status": { "type": "string", "enum": ["reserved", "checked_in", "cancelled"] },
+        "bookedBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "studentId",
+        "seatId",
+        "floorId",
+        "slotId",
+        "bookingDate",
+        "amount",
+        "paymentStatus",
+        "status",
+        "bookedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "BookingLock": {
+      "title": "BookingLock",
+      "description": "Atomic per-seat, per-slot, per-date concurrency lock used by counter transactions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "seatId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "floorId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slotId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingDate": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "status": { "type": "string", "enum": ["active", "cancelled"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookingId", "seatId", "floorId", "slotId", "bookingDate", "status", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized librarian and super-admin profiles."
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Student member records managed by admins."
+    },
+    "/floors/{floorId}": {
+      "schema": { "$ref": "#/entities/Floor" },
+      "description": "Floor plan canvas metadata and dimensions."
+    },
+    "/seats/{seatId}": {
+      "schema": { "$ref": "#/entities/Seat" },
+      "description": "Floor plan seats and structural elements."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Seat tier categories, colors, and pricing."
+    },
+    "/time_slots/{slotId}": {
+      "schema": { "$ref": "#/entities/TimeSlot" },
+      "description": "Daily booking windows."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Seat reservations recorded by librarians."
+    },
+    "/booking_locks/{lockId}": {
+      "schema": { "$ref": "#/entities/BookingLock" },
+      "description": "Atomic seat/slot/date locks preventing double bookings."
+    }
+  }
+}

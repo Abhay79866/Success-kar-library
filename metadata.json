@@ -1,0 +1,6 @@
+{
+  "name": "Folio & Desk — Library Seat Admin",
+  "description": "Admin-only library seat booking, visual floor layout editor, and counter POS system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

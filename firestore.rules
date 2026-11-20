@@ -1,0 +1,280 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn();
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn();
+    }
+
+    // --- Validation Blueprints ---
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['id', 'email', 'name', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'email', 'name', 'role', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.role in ['super_admin', 'staff'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'membershipType', 'membershipExpiry', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'phone', 'membershipType', 'membershipExpiry', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 32 &&
+        data.membershipType is string && data.membershipType.size() >= 1 && data.membershipType.size() <= 64 &&
+        data.membershipExpiry is string && data.membershipExpiry.size() == 10 && data.membershipExpiry.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.status in ['active', 'blocked'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFloor(data) {
+      return data.keys().hasAll(['id', 'name', 'widthPx', 'heightPx', 'layoutVersion', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'widthPx', 'heightPx', 'layoutVersion', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.widthPx is number && data.widthPx >= 200 && data.widthPx <= 5000 &&
+        data.heightPx is number && data.heightPx >= 200 && data.heightPx <= 5000 &&
+        data.layoutVersion is number && data.layoutVersion >= 1 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSeat(data) {
+      return data.keys().hasAll(['id', 'floorId', 'seatCode', 'x', 'y', 'shape', 'categoryId', 'status', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'floorId', 'seatCode', 'x', 'y', 'width', 'height', 'shape', 'categoryId', 'status', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.floorId) &&
+        data.seatCode is string && data.seatCode.size() >= 1 && data.seatCode.size() <= 32 &&
+        data.x is number && data.x >= 0 && data.x <= 5000 &&
+        data.y is number && data.y >= 0 && data.y <= 5000 &&
+        (!('width' in data) || (data.width is number && data.width >= 8 && data.width <= 2000)) &&
+        (!('height' in data) || (data.height is number && data.height >= 8 && data.height <= 2000)) &&
+        data.shape in ['desk', 'wall', 'door', 'pillar'] &&
+        data.categoryId is string && data.categoryId.size() <= 128 &&
+        data.status in ['active', 'maintenance'] &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['id', 'name', 'colorHex', 'price', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'colorHex', 'price', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 64 &&
+        data.colorHex is string && data.colorHex.size() == 7 && data.colorHex.matches('^#[0-9A-Fa-f]{6}$') &&
+        data.price is number && data.price >= 0 && data.price <= 100000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTimeSlot(data) {
+      return data.keys().hasAll(['id', 'name', 'startTime', 'endTime', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'startTime', 'endTime', 'price', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 64 &&
+        data.startTime is string && data.startTime.size() == 5 && data.startTime.matches('^\\d{2}:\\d{2}$') &&
+        data.endTime is string && data.endTime.size() == 5 && data.endTime.matches('^\\d{2}:\\d{2}$') &&
+        (!('price' in data) || (data.price is number && data.price >= 0 && data.price <= 100000)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll(['id', 'studentId', 'seatId', 'floorId', 'slotId', 'bookingDate', 'amount', 'paymentStatus', 'status', 'bookedBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'studentId', 'seatId', 'floorId', 'slotId', 'bookingDate', 'amount', 'paymentStatus', 'status', 'bookedBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.studentId) &&
+        isValidId(data.seatId) &&
+        isValidId(data.floorId) &&
+        isValidId(data.slotId) &&
+        data.bookingDate is string && data.bookingDate.size() == 10 && data.bookingDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.amount is number && data.amount >= 0 && data.amount <= 100000 &&
+        data.paymentStatus in ['paid', 'pending'] &&
+        data.status in ['reserved', 'checked_in', 'cancelled'] &&
+        isValidId(data.bookedBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBookingLock(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'seatId', 'floorId', 'slotId', 'bookingDate', 'status', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'bookingId', 'seatId', 'floorId', 'slotId', 'bookingDate', 'status', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.bookingId) &&
+        isValidId(data.seatId) &&
+        isValidId(data.floorId) &&
+        isValidId(data.slotId) &&
+        data.bookingDate is string && data.bookingDate.size() == 10 && data.bookingDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.status in ['active', 'cancelled'] &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && ((isSignedIn() && request.auth.uid == adminId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(adminId) && isSuperAdmin() && isValidAdmin(incoming()) &&
+        incoming().id == adminId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(adminId) && isSuperAdmin() && isValidAdmin(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'updatedAt']);
+      allow delete: if isValidId(adminId) && isSuperAdmin() && adminId != request.auth.uid;
+    }
+
+    match /students/{studentId} {
+      allow get: if isValidId(studentId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(studentId) && isAdmin() && isValidStudent(incoming()) &&
+        incoming().id == studentId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(studentId) && isAdmin() && isValidStudent(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'membershipType', 'membershipExpiry', 'status', 'updatedAt']);
+      allow delete: if isValidId(studentId) && isAdmin();
+    }
+
+    match /floors/{floorId} {
+      allow get: if isValidId(floorId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(floorId) && isAdmin() && isValidFloor(incoming()) &&
+        incoming().id == floorId &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(floorId) && isAdmin() && isValidFloor(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'widthPx', 'heightPx', 'layoutVersion', 'updatedAt']);
+      allow delete: if isValidId(floorId) && isAdmin();
+    }
+
+    match /seats/{seatId} {
+      allow get: if isValidId(seatId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(seatId) && isAdmin() && isValidSeat(incoming()) &&
+        incoming().id == seatId &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/floors/$(incoming().floorId));
+      allow update: if isValidId(seatId) && isAdmin() && isValidSeat(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().floorId == existing().floorId &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['seatCode', 'x', 'y', 'width', 'height', 'shape', 'categoryId', 'status', 'updatedAt']);
+      allow delete: if isValidId(seatId) && isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow get: if isValidId(categoryId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(categoryId) && isAdmin() && isValidCategory(incoming()) &&
+        incoming().id == categoryId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(categoryId) && isAdmin() && isValidCategory(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'colorHex', 'price', 'updatedAt']);
+      allow delete: if isValidId(categoryId) && isAdmin();
+    }
+
+    match /time_slots/{slotId} {
+      allow get: if isValidId(slotId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(slotId) && isAdmin() && isValidTimeSlot(incoming()) &&
+        incoming().id == slotId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(slotId) && isAdmin() && isValidTimeSlot(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'startTime', 'endTime', 'price', 'updatedAt']);
+      allow delete: if isValidId(slotId) && isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow get: if isValidId(bookingId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(bookingId) && isAdmin() && isValidBooking(incoming()) &&
+        incoming().id == bookingId &&
+        incoming().bookedBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/students/$(incoming().studentId)) &&
+        exists(/databases/$(database)/documents/seats/$(incoming().seatId)) &&
+        exists(/databases/$(database)/documents/floors/$(incoming().floorId)) &&
+        exists(/databases/$(database)/documents/time_slots/$(incoming().slotId));
+      allow update: if isValidId(bookingId) && isAdmin() && isValidBooking(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().studentId == existing().studentId &&
+        incoming().seatId == existing().seatId &&
+        incoming().floorId == existing().floorId &&
+        incoming().slotId == existing().slotId &&
+        incoming().bookingDate == existing().bookingDate &&
+        incoming().bookedBy == existing().bookedBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (existing().status != 'cancelled' || isSuperAdmin()) &&
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'status', 'updatedAt'])
+        );
+      allow delete: if isValidId(bookingId) && isSuperAdmin();
+    }
+
+    match /booking_locks/{lockId} {
+      allow get: if isValidId(lockId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(lockId) && isAdmin() && isValidBookingLock(incoming()) &&
+        incoming().id == lockId &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/seats/$(incoming().seatId)) &&
+        exists(/databases/$(database)/documents/floors/$(incoming().floorId)) &&
+        exists(/databases/$(database)/documents/time_slots/$(incoming().slotId));
+      allow update: if isValidId(lockId) && isAdmin() && isValidBookingLock(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().seatId == existing().seatId &&
+        incoming().floorId == existing().floorId &&
+        incoming().slotId == existing().slotId &&
+        incoming().bookingDate == existing().bookingDate &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['bookingId', 'status', 'updatedAt']);
+      allow delete: if isValidId(lockId) && isAdmin();
+    }
+  }
+}
