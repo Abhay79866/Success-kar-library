@@ -10,16 +10,28 @@ export interface AdminProfile {
 }
 
 export type StudentStatus = 'active' | 'blocked';
+export type FeeStatus = 'paid' | 'pending';
+export type StudentGender = 'Male' | 'Female' | 'Other';
 
 export interface Student {
   id: string;
   name: string;
-  phone: string;
-  membershipType: string;
-  membershipExpiry: string; // YYYY-MM-DD
+  phone?: string;
+  whatsappNumber?: string;
+  gender?: StudentGender;
+  membershipType?: string;
+  admissionDate?: string; // YYYY-MM-DD
+  lastPaymentDate?: string; // YYYY-MM-DD
+  currentPeriodEndDate?: string; // YYYY-MM-DD
+  membershipExpiry?: string; // YYYY-MM-DD (legacy alias synced with currentPeriodEndDate)
+  subscriptionEndDate?: string; // YYYY-MM-DD (alias synced with currentPeriodEndDate)
+  feeAmount?: number;
+  feeStatus?: FeeStatus;
+  nextCycleRenewed?: boolean; // default false; suppresses alert for current cycle when true
+  lastRemindedDate?: string; // YYYY-MM-DD
   status: StudentStatus;
   createdAt: unknown;
-  updatedAt: unknown;
+  updatedAt?: unknown;
 }
 
 export interface Floor {

@@ -150,9 +150,10 @@ export default function LedgerPage() {
       if (!q) return true;
       const student = studentMap.get(bk.studentId);
       const seat = seatMap.get(bk.seatId);
+      const studentPhone = (student?.whatsappNumber || student?.phone || '').toLowerCase();
       return (
         (student?.name.toLowerCase().includes(q) ?? false) ||
-        (student?.phone.toLowerCase().includes(q) ?? false) ||
+        studentPhone.includes(q) ||
         (seat?.seatCode.toLowerCase().includes(q) ?? false) ||
         bk.id.toLowerCase().includes(q)
       );

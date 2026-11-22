@@ -2,20 +2,34 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import {
   Armchair,
   ArrowRight,
+  BellRing,
   CalendarCheck,
+  CheckCircle2,
   IndianRupee,
   Percent,
   Users,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { db } from '@/lib/firebase';
 import { handleFirestoreError, OperationType } from '@/lib/firestore-errors';
 import { formatINR, formatTime12h, getDefaultExpiryDate } from '@/lib/formatters';
+import {
+  buildNextMonthRenewalUpdate,
+  formatExpiryRemainingLabel,
+  formatShortMonthDay,
+  getStudentFeeAmount,
+  getStudentLastPaymentDate,
+  getStudentPhoneForWhatsApp,
+  isExpiringOrNextRenewalDue,
+} from '@/lib/reminders';
 import type { Booking, Seat, Student, TimeSlot } from '@/lib/types';
+import { useRemindedToday } from '@/hooks/use-reminded-today';
 import { useAdminAuth } from '@/components/admin/admin-auth-context';
+import { WhatsAppSendButton } from '@/components/admin/whatsapp-send-button';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -27,8 +41,10 @@ export default function AdminDashboardPage() {
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [renewingId, setRenewingId] = useState<string | null>(null);
 
   const today = useMemo(() => getDefaultExpiryDate(0), []);
+  const { remindedIds, markReminded: handleMarkReminded } = useRemindedToday(today);
 
   useEffect(() => {
     if (!user || !adminProfile) return;
@@ -174,6 +190,52 @@ export default function AdminDashboardPage() {
     return list.slice(0, 6);
   }, [bookings]);
 
+  const expiringStudents = useMemo(() => {
+    const items: Array<{
+      student: Student;
+      daysRemaining: number;
+      endDate: string;
+      lastPaymentDate: string;
+      amount: number;
+    }> = [];
+
+    for (const student of students) {
+      const check = isExpiringOrNextRenewalDue(student, today);
+      if (check.eligible && check.daysRemaining !== null) {
+        items.push({
+          student,
+          daysRemaining: check.daysRemaining,
+          endDate: check.endDate,
+          lastPaymentDate: getStudentLastPaymentDate(student),
+          amount: getStudentFeeAmount(student),
+        });
+      }
+    }
+
+    items.sort((a, b) => a.daysRemaining - b.daysRemaining);
+    return items;
+  }, [students, today]);
+
+  const handleRenewNextMonth = async (student: Student) => {
+    setRenewingId(student.id);
+    try {
+      const updatePayload = buildNextMonthRenewalUpdate(student, today);
+      await updateDoc(doc(db, 'students', student.id), {
+        ...updatePayload,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success(
+        `Renewed ${student.name} through ${formatShortMonthDay(updatePayload.currentPeriodEndDate)}`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to renew subscription';
+      console.error('Failed to renew student next month:', err);
+      toast.error(`Failed to renew: ${msg}`);
+    } finally {
+      setRenewingId(null);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header Row */}
@@ -261,6 +323,128 @@ export default function AdminDashboardPage() {
             {students.length} total registered
           </p>
         </div>
+      </section>
+
+      {/* Subscription Ending Soon — Next Month Renewal Due */}
+      <section
+        aria-label="Subscription Ending Soon — Next Month Renewal Due"
+        className={cn(
+          'rounded-xl border p-5 space-y-4',
+          expiringStudents.length > 0
+            ? 'bg-[#F4EFEA] border-[#D9775B]/50'
+            : 'bg-[#FDFBF7] border-[#E4DDD5]'
+        )}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-start gap-3">
+            <div className="size-9 rounded-lg bg-[#FDFBF7] border border-[#E4DDD5] flex items-center justify-center text-[#D9775B] shrink-0 mt-0.5">
+              <BellRing className="size-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-serif text-lg font-semibold text-[#2C2A29]">
+                  Subscription Ending Soon — Next Month Renewal Due
+                </h3>
+                {!loading && expiringStudents.length > 0 && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-[#D9775B]/15 text-[#B45339] tabular-nums">
+                    {expiringStudents.length} due
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#6E6762]">
+                Members whose current monthly cycle ends within 3 days (or is overdue) and next month is not yet renewed.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/admin/students"
+            className="inline-flex items-center text-xs font-medium text-[#D9775B] hover:underline shrink-0"
+          >
+            Manage all students
+            <ArrowRight className="size-3.5 ml-1" />
+          </Link>
+        </div>
+
+        {loading ? (
+          <div className="h-14 rounded-lg bg-[#FDFBF7]/70 border border-[#E4DDD5] animate-pulse" />
+        ) : expiringStudents.length === 0 ? (
+          <div className="bg-[#FDFBF7] border border-[#E4DDD5] rounded-lg px-4 py-3 flex items-center gap-2 text-sm text-[#6E6762]">
+            <CheckCircle2 className="size-4 text-[#7D9B76] shrink-0" />
+            <span>No student billing cycles ending within the next 3 days.</span>
+          </div>
+        ) : (
+          <div className="bg-[#FDFBF7] border border-[#E4DDD5] rounded-lg divide-y divide-[#E4DDD5]">
+            {expiringStudents.map(
+              ({ student, daysRemaining, endDate, lastPaymentDate, amount }) => {
+                const isRemindedToday =
+                  student.lastRemindedDate === today || remindedIds.has(student.id);
+                const isUrgent = daysRemaining <= 0;
+                const shortEndDate = formatShortMonthDay(endDate);
+                return (
+                  <div
+                    key={student.id}
+                    className="px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm text-[#2C2A29]">
+                          {student.name}
+                        </p>
+                        <span
+                          className={cn(
+                            'text-xs font-medium px-2 py-0.5 rounded-md',
+                            isUrgent
+                              ? 'bg-[#C25E5E]/15 text-[#A54545]'
+                              : 'bg-[#D9775B]/15 text-[#B45339]'
+                          )}
+                        >
+                          {formatExpiryRemainingLabel(daysRemaining)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#6E6762] tabular-nums">
+                        Ends {shortEndDate} ({endDate}) · {getStudentPhoneForWhatsApp(student)} ·{' '}
+                        {student.membershipType || 'Monthly Plan'}
+                        {lastPaymentDate ? ` · Last paid ${formatShortMonthDay(lastPaymentDate)}` : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 flex-wrap">
+                      <div className="text-left md:text-right tabular-nums">
+                        <p className="text-sm font-semibold text-[#2C2A29]">
+                          {formatINR(amount)}
+                        </p>
+                        <p className="text-[11px] text-[#D9775B] font-medium">
+                          Next Month Fee
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={renewingId === student.id}
+                          onClick={() => void handleRenewNextMonth(student)}
+                          className="h-8 px-2.5 text-xs border-[#DDD4CA] bg-[#FDFBF7] text-[#2C2A29] hover:bg-[#F4EFEA] cursor-pointer whitespace-nowrap"
+                        >
+                          {renewingId === student.id ? 'Renewing...' : 'Renew Next Month'}
+                        </Button>
+
+                        <WhatsAppSendButton
+                          student={student}
+                          todayStr={today}
+                          remindedToday={isRemindedToday}
+                          onReminded={handleMarkReminded}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            )}
+          </div>
+        )}
       </section>
 
       {/* Two-Column Breakdown */}

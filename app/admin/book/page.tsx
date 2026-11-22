@@ -256,10 +256,12 @@ export default function BookSeatPage() {
     const q = studentQuery.trim().toLowerCase();
     return students.filter((s) => {
       if (!q) return true;
+      const phone = (s.whatsappNumber || s.phone || '').toLowerCase();
+      const plan = (s.membershipType || '').toLowerCase();
       return (
         s.name.toLowerCase().includes(q) ||
-        s.phone.toLowerCase().includes(q) ||
-        s.membershipType.toLowerCase().includes(q)
+        phone.includes(q) ||
+        plan.includes(q)
       );
     });
   }, [students, studentQuery]);
@@ -534,7 +536,7 @@ export default function BookSeatPage() {
               <span className="truncate text-[#2C2A29] font-medium">
                 {selectedStudent.name} ·{' '}
                 <span className="font-normal text-[#6E6762] tabular-nums">
-                  {selectedStudent.phone}
+                  {selectedStudent.whatsappNumber || selectedStudent.phone || '—'}
                 </span>
               </span>
             ) : (
@@ -615,7 +617,12 @@ export default function BookSeatPage() {
                             {stu.name}
                           </p>
                           <p className="text-xs text-[#6E6762] truncate tabular-nums">
-                            {stu.phone} · {stu.membershipType}
+                            {[
+                              stu.whatsappNumber || stu.phone,
+                              stu.membershipType || 'No plan',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </p>
                         </div>
                         {isBlocked ? (

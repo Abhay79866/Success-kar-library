@@ -44,16 +44,28 @@ service cloud.firestore {
     }
 
     function isValidStudent(data) {
-      return data.keys().hasAll(['id', 'name', 'phone', 'membershipType', 'membershipExpiry', 'status', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'name', 'phone', 'membershipType', 'membershipExpiry', 'status', 'createdAt', 'updatedAt']) &&
+      return data.keys().hasAll(['id', 'name', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'name', 'phone', 'whatsappNumber', 'gender', 'membershipType', 'admissionDate', 'lastPaymentDate', 'currentPeriodEndDate', 'membershipExpiry', 'subscriptionEndDate', 'feeAmount', 'feeStatus', 'nextCycleRenewed', 'lastRemindedDate', 'status', 'createdAt', 'updatedAt']) &&
         isValidId(data.id) &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
-        data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 32 &&
-        data.membershipType is string && data.membershipType.size() >= 1 && data.membershipType.size() <= 64 &&
-        data.membershipExpiry is string && data.membershipExpiry.size() == 10 && data.membershipExpiry.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        (('phone' in data && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 32) ||
+         ('whatsappNumber' in data && data.whatsappNumber is string && data.whatsappNumber.size() >= 10 && data.whatsappNumber.size() <= 32)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 32)) &&
+        (!('whatsappNumber' in data) || (data.whatsappNumber is string && data.whatsappNumber.size() <= 32)) &&
+        (!('gender' in data) || (data.gender in ['Male', 'Female', 'Other'])) &&
+        (!('membershipType' in data) || (data.membershipType is string && data.membershipType.size() <= 64)) &&
+        (!('admissionDate' in data) || (data.admissionDate is string && (data.admissionDate.size() == 0 || (data.admissionDate.size() == 10 && data.admissionDate.matches('^\\d{4}-\\d{2}-\\d{2}$'))))) &&
+        (!('lastPaymentDate' in data) || (data.lastPaymentDate is string && (data.lastPaymentDate.size() == 0 || (data.lastPaymentDate.size() == 10 && data.lastPaymentDate.matches('^\\d{4}-\\d{2}-\\d{2}$'))))) &&
+        (!('currentPeriodEndDate' in data) || (data.currentPeriodEndDate is string && (data.currentPeriodEndDate.size() == 0 || (data.currentPeriodEndDate.size() == 10 && data.currentPeriodEndDate.matches('^\\d{4}-\\d{2}-\\d{2}$'))))) &&
+        (!('membershipExpiry' in data) || (data.membershipExpiry is string && (data.membershipExpiry.size() == 0 || (data.membershipExpiry.size() == 10 && data.membershipExpiry.matches('^\\d{4}-\\d{2}-\\d{2}$'))))) &&
+        (!('subscriptionEndDate' in data) || (data.subscriptionEndDate is string && (data.subscriptionEndDate.size() == 0 || (data.subscriptionEndDate.size() == 10 && data.subscriptionEndDate.matches('^\\d{4}-\\d{2}-\\d{2}$'))))) &&
+        (!('feeAmount' in data) || (data.feeAmount is number && data.feeAmount >= 0 && data.feeAmount <= 100000)) &&
+        (!('feeStatus' in data) || (data.feeStatus in ['paid', 'pending'])) &&
+        (!('nextCycleRenewed' in data) || (data.nextCycleRenewed is bool)) &&
+        (!('lastRemindedDate' in data) || (data.lastRemindedDate is string && (data.lastRemindedDate.size() == 0 || (data.lastRemindedDate.size() == 10 && data.lastRemindedDate.matches('^\\d{4}-\\d{2}-\\d{2}$'))))) &&
         data.status in ['active', 'blocked'] &&
         data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     function isValidFloor(data) {
@@ -159,12 +171,12 @@ service cloud.firestore {
       allow create: if isValidId(studentId) && isAdmin() && isValidStudent(incoming()) &&
         incoming().id == studentId &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
       allow update: if isValidId(studentId) && isAdmin() && isValidStudent(incoming()) &&
         incoming().id == existing().id &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'membershipType', 'membershipExpiry', 'status', 'updatedAt']);
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'whatsappNumber', 'gender', 'membershipType', 'admissionDate', 'lastPaymentDate', 'currentPeriodEndDate', 'membershipExpiry', 'subscriptionEndDate', 'feeAmount', 'feeStatus', 'nextCycleRenewed', 'lastRemindedDate', 'status', 'updatedAt']);
       allow delete: if isValidId(studentId) && isAdmin();
     }
 
