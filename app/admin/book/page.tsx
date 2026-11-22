@@ -30,6 +30,11 @@ import {
   generateDocId,
   getDefaultExpiryDate,
 } from '@/lib/formatters';
+import {
+  doSlotsOverlap,
+  getBookedSeatColorByGender,
+  getShortShiftLabel,
+} from '@/lib/shifts';
 import type {
   Booking,
   Category,
@@ -38,6 +43,7 @@ import type {
   Student,
   TimeSlot,
 } from '@/lib/types';
+import type { BookedSeatDisplayInfo } from '@/components/booking/booking-floor-map';
 import { useAdminAuth } from '@/components/admin/admin-auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,7 +110,7 @@ export default function BookSeatPage() {
   const [floors, setFloors] = useState<Floor[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
-  const [slotBookings, setSlotBookings] = useState<Booking[]>([]);
+  const [dateBookings, setDateBookings] = useState<Booking[]>([]);
   const [loadingMap, setLoadingMap] = useState<boolean>(true);
 
   // Step 4: Selected Seat Side Panel
@@ -212,7 +218,7 @@ export default function BookSeatPage() {
     return () => unsub();
   }, [user, adminProfile, selectedFloorId]);
 
-  // Load bookings for selected date + slot
+  // Load all active bookings for selected date (so Full Day / Morning / Evening overlaps resolve instantly)
   useEffect(() => {
     if (!user || !adminProfile || !bookingDate) return;
 
@@ -224,18 +230,14 @@ export default function BookSeatPage() {
       q,
       (snap) => {
         const allForDate = snap.docs.map((d) => d.data() as Booking);
-        setSlotBookings(
-          allForDate.filter(
-            (b) => b.slotId === selectedSlotId && b.status !== 'cancelled'
-          )
-        );
+        setDateBookings(allForDate.filter((b) => b.status !== 'cancelled'));
       },
       (err) =>
         handleFirestoreError(err, OperationType.LIST, `bookings?bookingDate=${bookingDate}`)
     );
 
     return () => unsub();
-  }, [user, adminProfile, bookingDate, selectedSlotId]);
+  }, [user, adminProfile, bookingDate]);
 
   const activeFloor = useMemo(
     () => floors.find((f) => f.id === selectedFloorId) || null,
@@ -266,19 +268,6 @@ export default function BookSeatPage() {
     });
   }, [students, studentQuery]);
 
-  const activeBookingsBySeatId = useMemo(() => {
-    const map = new Map<string, Booking>();
-    for (const bk of slotBookings) {
-      map.set(bk.seatId, bk);
-    }
-    return map;
-  }, [slotBookings]);
-
-  const bookedSeatIds = useMemo(
-    () => new Set(activeBookingsBySeatId.keys()),
-    [activeBookingsBySeatId]
-  );
-
   const categoryMap = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
     [categories]
@@ -288,6 +277,71 @@ export default function BookSeatPage() {
     () => new Map(students.map((s) => [s.id, s])),
     [students]
   );
+
+  const slotMap = useMemo(
+    () => new Map(slots.map((s) => [s.id, s])),
+    [slots]
+  );
+
+  const overlappingSeatBookingsMap = useMemo(() => {
+    const map = new Map<string, Booking[]>();
+    if (!selectedSlot) return map;
+
+    for (const bk of dateBookings) {
+      const bkSlot = slotMap.get(bk.slotId);
+      const overlaps = bkSlot
+        ? doSlotsOverlap(bkSlot, selectedSlot)
+        : bk.slotId === selectedSlot.id;
+      if (!overlaps) continue;
+
+      const list = map.get(bk.seatId) || [];
+      list.push(bk);
+      map.set(bk.seatId, list);
+    }
+
+    for (const [, list] of map) {
+      list.sort((a, b) => {
+        const startA = slotMap.get(a.slotId)?.startTime || '';
+        const startB = slotMap.get(b.slotId)?.startTime || '';
+        return startA.localeCompare(startB);
+      });
+    }
+
+    return map;
+  }, [dateBookings, selectedSlot, slotMap]);
+
+  const bookedSeatInfoMap = useMemo(() => {
+    const map = new Map<string, BookedSeatDisplayInfo>();
+    for (const [seatId, seatBookings] of overlappingSeatBookingsMap) {
+      const primary = seatBookings[0];
+      const student = studentMap.get(primary.studentId);
+      const baseName = student?.name || 'Booked';
+      const studentName =
+        seatBookings.length > 1 ? `${baseName} +${seatBookings.length - 1}` : baseName;
+      const shiftLabel = seatBookings
+        .map((b) => getShortShiftLabel(slotMap.get(b.slotId)?.name || 'Shift'))
+        .join(' & ');
+
+      map.set(seatId, {
+        fillColor: getBookedSeatColorByGender(student?.gender),
+        studentName,
+        shiftLabel,
+      });
+    }
+    return map;
+  }, [overlappingSeatBookingsMap, studentMap, slotMap]);
+
+  const bookedSeatIds = useMemo(
+    () => new Set(overlappingSeatBookingsMap.keys()),
+    [overlappingSeatBookingsMap]
+  );
+
+  const activeSelectedSeat = useMemo(() => {
+    if (!selectedSeat) return null;
+    if (selectedSeat.status !== 'active') return null;
+    if (bookedSeatIds.has(selectedSeat.id)) return null;
+    return selectedSeat;
+  }, [selectedSeat, bookedSeatIds]);
 
   const getDefaultFee = (seat: Seat | null) => {
     if (!seat) return 0;
@@ -299,6 +353,19 @@ export default function BookSeatPage() {
   };
 
   const handleSelectSeat = (seat: Seat) => {
+    if (seat.status === 'maintenance') {
+      toast.error(`Seat ${seat.seatCode} is under maintenance and cannot be selected.`);
+      setSelectedSeat(null);
+      return;
+    }
+    const info = bookedSeatInfoMap.get(seat.id);
+    if (info) {
+      toast.error(
+        `Seat ${seat.seatCode} is unavailable — booked by ${info.studentName} (${info.shiftLabel}).`
+      );
+      setSelectedSeat(null);
+      return;
+    }
     setSelectedSeat(seat);
     const fee = getDefaultFee(seat);
     setCustomAmount(String(fee));
@@ -306,7 +373,7 @@ export default function BookSeatPage() {
 
   const handleConfirmBooking = async () => {
     if (!user) return;
-    if (!bookingDate || !selectedSlotId || !selectedFloorId) {
+    if (!bookingDate || !selectedSlotId || !selectedFloorId || !selectedSlot) {
       toast.error('Select a booking date and shift first.');
       return;
     }
@@ -318,12 +385,26 @@ export default function BookSeatPage() {
       toast.error('Cannot book a seat for a blocked student.');
       return;
     }
-    if (!selectedSeat || selectedSeat.shape !== 'desk') {
+    if (!activeSelectedSeat || activeSelectedSeat.shape !== 'desk') {
       toast.error('Please click an available desk on the floor map.');
       return;
     }
-    if (selectedSeat.status === 'maintenance') {
-      toast.error('This seat is currently under maintenance.');
+
+    // Client-side overlap check across all active bookings on this seat & date
+    const conflictingForSeat = dateBookings.filter((bk) => {
+      if (bk.seatId !== activeSelectedSeat.id) return false;
+      const bkSlot = slotMap.get(bk.slotId);
+      return bkSlot ? doSlotsOverlap(bkSlot, selectedSlot) : bk.slotId === selectedSlot.id;
+    });
+
+    if (conflictingForSeat.length > 0) {
+      const conflictShiftNames = conflictingForSeat
+        .map((bk) => slotMap.get(bk.slotId)?.name || 'another shift')
+        .join(', ');
+      toast.error(
+        `Seat ${activeSelectedSeat.seatCode} is already booked for ${conflictShiftNames} on ${bookingDate}.`
+      );
+      setSelectedSeat(null);
       return;
     }
 
@@ -335,16 +416,22 @@ export default function BookSeatPage() {
 
     setConfirming(true);
     const bookingId = generateDocId('bk');
-    const lockId = `${selectedSeat.id}_${selectedSlotId}_${bookingDate}`;
+    const lockId = `${activeSelectedSeat.id}_${selectedSlotId}_${bookingDate}`;
+    const overlappingSlots = slots.filter((s) => doSlotsOverlap(s, selectedSlot));
+    const slotsToCheck =
+      overlappingSlots.length > 0 ? overlappingSlots : [selectedSlot];
 
     try {
       await runTransaction(db, async (tx) => {
-        const seatRef = doc(db, 'seats', selectedSeat.id);
-        const lockRef = doc(db, 'booking_locks', lockId);
+        const seatRef = doc(db, 'seats', activeSelectedSeat.id);
+        const lockRefs = slotsToCheck.map((s) => ({
+          slot: s,
+          ref: doc(db, 'booking_locks', `${activeSelectedSeat.id}_${s.id}_${bookingDate}`),
+        }));
 
-        const [seatSnap, lockSnap] = await Promise.all([
+        const [seatSnap, ...lockSnaps] = await Promise.all([
           tx.get(seatRef),
-          tx.get(lockRef),
+          ...lockRefs.map((entry) => tx.get(entry.ref)),
         ]);
 
         if (!seatSnap.exists()) {
@@ -354,18 +441,23 @@ export default function BookSeatPage() {
         if (liveSeat.status !== 'active') {
           throw new Error('SEAT_IN_MAINTENANCE');
         }
-        if (lockSnap.exists()) {
-          const lockData = lockSnap.data() as { status?: string };
-          if (lockData.status !== 'cancelled') {
-            throw new Error('SEAT_ALREADY_BOOKED');
+
+        for (let i = 0; i < lockSnaps.length; i += 1) {
+          const snap = lockSnaps[i];
+          if (snap.exists()) {
+            const lockData = snap.data() as { status?: string };
+            if (lockData.status !== 'cancelled') {
+              throw new Error(`SEAT_CONFLICT:${lockRefs[i].slot.name}`);
+            }
           }
         }
 
         const bookingRef = doc(db, 'bookings', bookingId);
+        const targetLockRef = doc(db, 'booking_locks', lockId);
         tx.set(bookingRef, {
           id: bookingId,
           studentId: selectedStudent.id,
-          seatId: selectedSeat.id,
+          seatId: activeSelectedSeat.id,
           floorId: selectedFloorId,
           slotId: selectedSlotId,
           bookingDate,
@@ -377,10 +469,10 @@ export default function BookSeatPage() {
           updatedAt: serverTimestamp(),
         });
 
-        tx.set(lockRef, {
+        tx.set(targetLockRef, {
           id: lockId,
           bookingId,
-          seatId: selectedSeat.id,
+          seatId: activeSelectedSeat.id,
           floorId: selectedFloorId,
           slotId: selectedSlotId,
           bookingDate,
@@ -389,13 +481,11 @@ export default function BookSeatPage() {
         });
       });
 
-      const slotLabel = selectedSlot
-        ? `${selectedSlot.name} (${formatTime12h(selectedSlot.startTime)} – ${formatTime12h(selectedSlot.endTime)})`
-        : selectedSlotId;
+      const slotLabel = `${selectedSlot.name} (${formatTime12h(selectedSlot.startTime)} – ${formatTime12h(selectedSlot.endTime)})`;
 
       setCreatedSummary({
         id: bookingId,
-        seatCode: selectedSeat.seatCode,
+        seatCode: activeSelectedSeat.seatCode,
         studentName: selectedStudent.name,
         slotLabel,
         bookingDate,
@@ -406,8 +496,12 @@ export default function BookSeatPage() {
       setSelectedSeat(null);
     } catch (err) {
       if (err instanceof Error) {
-        if (err.message === 'SEAT_ALREADY_BOOKED') {
-          toast.error('This seat is already booked for the selected date & shift.');
+        if (err.message.startsWith('SEAT_CONFLICT:')) {
+          const conflictName = err.message.slice('SEAT_CONFLICT:'.length);
+          toast.error(
+            `Seat ${activeSelectedSeat.seatCode} is already booked for ${conflictName} on ${bookingDate}.`
+          );
+          setSelectedSeat(null);
           return;
         }
         if (err.message === 'SEAT_IN_MAINTENANCE') {
@@ -457,11 +551,32 @@ export default function BookSeatPage() {
   ).length;
   const bookedCount = deskSeats.filter((s) => bookedSeatIds.has(s.id)).length;
 
-  const selectedSeatExistingBooking = selectedSeat
-    ? activeBookingsBySeatId.get(selectedSeat.id) || null
-    : null;
-  const selectedSeatCategory = selectedSeat?.categoryId
-    ? categoryMap.get(selectedSeat.categoryId) || null
+  const occupiedSeatRows = useMemo(() => {
+    const deskMap = new Map(deskSeats.map((s) => [s.id, s]));
+    const rows: Array<{
+      seat: Seat;
+      booking: Booking;
+      student: Student | undefined;
+      shiftLabel: string;
+    }> = [];
+    for (const [seatId, bks] of overlappingSeatBookingsMap) {
+      const seat = deskMap.get(seatId);
+      if (!seat) continue;
+      for (const bk of bks) {
+        rows.push({
+          seat,
+          booking: bk,
+          student: studentMap.get(bk.studentId),
+          shiftLabel: getShortShiftLabel(slotMap.get(bk.slotId)?.name || 'Shift'),
+        });
+      }
+    }
+    rows.sort((a, b) => a.seat.seatCode.localeCompare(b.seat.seatCode));
+    return rows;
+  }, [deskSeats, overlappingSeatBookingsMap, studentMap, slotMap]);
+
+  const selectedSeatCategory = activeSelectedSeat?.categoryId
+    ? categoryMap.get(activeSelectedSeat.categoryId) || null
     : null;
 
   return (
@@ -688,8 +803,16 @@ export default function BookSeatPage() {
                 Available ({availableCount})
               </span>
               <span className="inline-flex items-center gap-1.5 text-[#2C2A29]">
+                <span className="size-3 rounded-sm bg-[#DC2626] inline-block" />
+                Male
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[#2C2A29]">
+                <span className="size-3 rounded-sm bg-[#DB2777] inline-block" />
+                Female
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[#2C2A29]">
                 <span className="size-3 rounded-sm bg-[#C25E5E] inline-block" />
-                Booked ({bookedCount})
+                Other / Booked ({bookedCount})
               </span>
               <span className="inline-flex items-center gap-1.5 text-[#6E6762]">
                 <span className="size-3 rounded-sm bg-[#9C948D] inline-block" />
@@ -728,8 +851,8 @@ export default function BookSeatPage() {
               heightPx={activeFloor.heightPx}
               seats={seats}
               categories={categories}
-              bookedSeatIds={bookedSeatIds}
-              selectedSeatId={selectedSeat?.id || null}
+              bookedSeatInfoMap={bookedSeatInfoMap}
+              selectedSeatId={activeSelectedSeat?.id || null}
               onSelectSeat={handleSelectSeat}
             />
           )}
@@ -737,90 +860,78 @@ export default function BookSeatPage() {
 
         {/* Right Side Panel: Selected Seat Counter Summary */}
         <aside className="bg-[#FDFBF7] border border-[#E4DDD5] rounded-xl p-5 space-y-5">
-          {!selectedSeat ? (
-            <div className="py-8 text-center space-y-2">
-              <Armchair className="size-7 text-[#7D9B76] mx-auto" />
-              <h3 className="font-serif text-lg font-semibold text-[#2C2A29]">
-                3. Select an Available Seat
-              </h3>
-              <p className="text-xs text-[#6E6762] leading-relaxed">
-                Click any Sage Green desk on the floor map to review pricing and confirm a
-                walk-in reservation.
-              </p>
-            </div>
-          ) : selectedSeatExistingBooking ? (
+          {!activeSelectedSeat ? (
             <div className="space-y-4">
-              <div className="space-y-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-[#C25E5E]">
-                  Seat Occupied
-                </p>
-                <h3 className="font-serif text-2xl font-semibold text-[#2C2A29]">
-                  Seat {selectedSeat.seatCode}
+              <div className="py-6 text-center space-y-2">
+                <Armchair className="size-7 text-[#7D9B76] mx-auto" />
+                <h3 className="font-serif text-lg font-semibold text-[#2C2A29]">
+                  3. Select an Available Seat
                 </h3>
+                <p className="text-xs text-[#6E6762] leading-relaxed">
+                  Click any Sage Green desk on the floor map to review pricing and confirm a
+                  walk-in reservation. Booked seats (Red = Male, Pink = Female) cannot be
+                  selected for overlapping shifts.
+                </p>
               </div>
 
-              <Separator className="bg-[#E4DDD5]" />
-
-              <div className="space-y-2.5 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#6E6762]">Student</span>
-                  <span className="font-medium text-[#2C2A29] text-right">
-                    {studentMap.get(selectedSeatExistingBooking.studentId)?.name ||
-                      'Registered Student'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#6E6762]">Date</span>
-                  <span className="tabular-nums text-[#2C2A29]">
-                    {selectedSeatExistingBooking.bookingDate}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#6E6762]">Amount</span>
-                  <span className="font-medium tabular-nums text-[#2C2A29]">
-                    {formatINR(selectedSeatExistingBooking.amount)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#6E6762]">Payment</span>
-                  <span
-                    className={cn(
-                      'font-medium capitalize',
-                      selectedSeatExistingBooking.paymentStatus === 'paid'
-                        ? 'text-[#597752]'
-                        : 'text-[#D9775B]'
-                    )}
-                  >
-                    {selectedSeatExistingBooking.paymentStatus}
-                  </span>
-                </div>
-              </div>
-
-              {selectedSeatExistingBooking.paymentStatus === 'pending' && (
-                <Button
-                  type="button"
-                  disabled={markingPaid}
-                  onClick={() =>
-                    void handleMarkAsPaid(selectedSeatExistingBooking.id, false)
-                  }
-                  className="w-full bg-[#7D9B76] hover:bg-[#6A8863] text-[#FDFBF7] cursor-pointer"
-                >
-                  {markingPaid ? 'Updating...' : 'Mark as Paid (Cash / UPI)'}
-                </Button>
+              {occupiedSeatRows.length > 0 && (
+                <>
+                  <Separator className="bg-[#E4DDD5]" />
+                  <div className="space-y-2.5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-[#6E6762]">
+                      Occupied / Overlapping ({occupiedSeatRows.length})
+                    </p>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-[#E4DDD5]/70 pr-1">
+                      {occupiedSeatRows.map(({ seat, booking, student, shiftLabel }) => {
+                        const dotColor = getBookedSeatColorByGender(student?.gender);
+                        return (
+                          <div
+                            key={booking.id}
+                            className="py-2 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium text-[#2C2A29] flex items-center gap-1.5 truncate">
+                                <span
+                                  className="size-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: dotColor }}
+                                />
+                                <span>
+                                  {seat.seatCode} · {student?.name || 'Student'}
+                                </span>
+                              </p>
+                              <p className="text-[#6E6762] pl-4 tabular-nums">
+                                {shiftLabel} · {formatINR(booking.amount)} ·{' '}
+                                <span
+                                  className={cn(
+                                    'capitalize font-medium',
+                                    booking.paymentStatus === 'paid'
+                                      ? 'text-[#597752]'
+                                      : 'text-[#D9775B]'
+                                  )}
+                                >
+                                  {booking.paymentStatus}
+                                </span>
+                              </p>
+                            </div>
+                            {booking.paymentStatus === 'pending' && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={markingPaid}
+                                onClick={() => void handleMarkAsPaid(booking.id, false)}
+                                className="h-7 px-2 text-[11px] border-[#DDD4CA] bg-[#FDFBF7] text-[#2C2A29] hover:bg-[#F4EFEA] cursor-pointer shrink-0"
+                              >
+                                Mark Paid
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
               )}
-            </div>
-          ) : selectedSeat.status === 'maintenance' ? (
-            <div className="space-y-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-[#6E6762]">
-                Unavailable
-              </p>
-              <h3 className="font-serif text-xl font-semibold text-[#2C2A29]">
-                Seat {selectedSeat.seatCode}
-              </h3>
-              <p className="text-sm text-[#6E6762]">
-                This desk is currently marked for maintenance in the Layout Editor and
-                cannot be booked.
-              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -829,7 +940,7 @@ export default function BookSeatPage() {
                   Available for Booking
                 </p>
                 <h3 className="font-serif text-2xl font-semibold text-[#2C2A29]">
-                  Seat {selectedSeat.seatCode}
+                  Seat {activeSelectedSeat.seatCode}
                 </h3>
                 {selectedSeatCategory && (
                   <p className="text-xs text-[#6E6762]">

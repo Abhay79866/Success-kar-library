@@ -4,12 +4,18 @@ import React from 'react';
 import { Stage, Layer, Rect, Line, Text, Group, Arc } from 'react-konva';
 import type { Category, Seat } from '@/lib/types';
 
+export interface BookedSeatDisplayInfo {
+  fillColor: string;
+  studentName: string;
+  shiftLabel: string;
+}
+
 interface BookingFloorMapProps {
   widthPx: number;
   heightPx: number;
   seats: Seat[];
   categories: Category[];
-  bookedSeatIds: Set<string>;
+  bookedSeatInfoMap: Map<string, BookedSeatDisplayInfo>;
   selectedSeatId: string | null;
   onSelectSeat: (seat: Seat) => void;
 }
@@ -19,7 +25,7 @@ export default function BookingFloorMap({
   heightPx,
   seats,
   categories,
-  bookedSeatIds,
+  bookedSeatInfoMap,
   selectedSeatId,
   onSelectSeat,
 }: BookingFloorMapProps) {
@@ -63,8 +69,24 @@ export default function BookingFloorMap({
 
         <Layer>
           {seats.map((seat) => {
-            const w = seat.width ?? (seat.shape === 'desk' ? 64 : seat.shape === 'wall' ? 160 : seat.shape === 'door' ? 60 : 40);
-            const h = seat.height ?? (seat.shape === 'desk' ? 48 : seat.shape === 'wall' ? 16 : seat.shape === 'door' ? 16 : 40);
+            const w =
+              seat.width ??
+              (seat.shape === 'desk'
+                ? 64
+                : seat.shape === 'wall'
+                  ? 160
+                  : seat.shape === 'door'
+                    ? 60
+                    : 40);
+            const h =
+              seat.height ??
+              (seat.shape === 'desk'
+                ? 48
+                : seat.shape === 'wall'
+                  ? 16
+                  : seat.shape === 'door'
+                    ? 16
+                    : 40);
 
             if (seat.shape === 'wall') {
               return (
@@ -120,17 +142,20 @@ export default function BookingFloorMap({
               );
             }
 
-            // Desk status colors: Sage Green (Available), Muted Brick (Booked), Muted Gray (Maintenance)
-            const isBooked = bookedSeatIds.has(seat.id);
+            // Desk status colors: Sage Green (Available), Red/Pink/Brick (Booked by Gender), Muted Gray (Maintenance)
+            const bookedInfo = bookedSeatInfoMap.get(seat.id) || null;
+            const isBooked = bookedInfo !== null;
             const isMaintenance = seat.status === 'maintenance';
-            const isSelected = selectedSeatId === seat.id;
+            const isSelected = !isBooked && !isMaintenance && selectedSeatId === seat.id;
             const category = seat.categoryId ? categoryMap.get(seat.categoryId) : undefined;
 
             const fillColor = isMaintenance
               ? '#9C948D'
-              : isBooked
-                ? '#C25E5E'
+              : bookedInfo
+                ? bookedInfo.fillColor
                 : '#7D9B76';
+
+            const showStackedBookedLabels = isBooked && h >= 42 && w >= 52;
 
             return (
               <Group
@@ -141,7 +166,10 @@ export default function BookingFloorMap({
                 onTap={() => onSelectSeat(seat)}
                 onMouseEnter={(e) => {
                   const stage = e.target.getStage();
-                  if (stage) stage.container().style.cursor = 'pointer';
+                  if (stage) {
+                    stage.container().style.cursor =
+                      isBooked || isMaintenance ? 'not-allowed' : 'pointer';
+                  }
                 }}
                 onMouseLeave={(e) => {
                   const stage = e.target.getStage();
@@ -169,19 +197,83 @@ export default function BookingFloorMap({
                     listening={false}
                   />
                 )}
-                <Text
-                  text={seat.seatCode}
-                  width={w}
-                  height={h}
-                  align="center"
-                  verticalAlign="middle"
-                  fontFamily="Inter, sans-serif"
-                  fontSize={Math.min(13, Math.max(10, Math.floor(h * 0.28)))}
-                  fontStyle="600"
-                  fill="#FDFBF7"
-                  padding={4}
-                  listening={false}
-                />
+
+                {showStackedBookedLabels && bookedInfo ? (
+                  <>
+                    <Text
+                      text={seat.seatCode}
+                      x={3}
+                      y={4}
+                      width={w - 6}
+                      height={13}
+                      align="center"
+                      verticalAlign="middle"
+                      fontFamily="Inter, sans-serif"
+                      fontSize={11}
+                      fontStyle="700"
+                      fill="#FDFBF7"
+                      ellipsis
+                      wrap="none"
+                      listening={false}
+                    />
+                    <Text
+                      text={bookedInfo.studentName}
+                      x={3}
+                      y={18}
+                      width={w - 6}
+                      height={12}
+                      align="center"
+                      verticalAlign="middle"
+                      fontFamily="Inter, sans-serif"
+                      fontSize={9.5}
+                      fontStyle="600"
+                      fill="#FDFBF7"
+                      ellipsis
+                      wrap="none"
+                      listening={false}
+                    />
+                    <Text
+                      text={bookedInfo.shiftLabel}
+                      x={3}
+                      y={Math.max(31, h - 15)}
+                      width={w - 6}
+                      height={11}
+                      align="center"
+                      verticalAlign="middle"
+                      fontFamily="Inter, sans-serif"
+                      fontSize={8.5}
+                      fontStyle="500"
+                      fill="#FDFBF7"
+                      opacity={0.9}
+                      ellipsis
+                      wrap="none"
+                      listening={false}
+                    />
+                  </>
+                ) : (
+                  <Text
+                    text={
+                      bookedInfo
+                        ? `${seat.seatCode}\n${bookedInfo.studentName}`
+                        : seat.seatCode
+                    }
+                    width={w}
+                    height={h}
+                    align="center"
+                    verticalAlign="middle"
+                    fontFamily="Inter, sans-serif"
+                    fontSize={
+                      bookedInfo
+                        ? Math.min(10, Math.max(8, Math.floor(h * 0.22)))
+                        : Math.min(13, Math.max(10, Math.floor(h * 0.28)))
+                    }
+                    fontStyle="600"
+                    fill="#FDFBF7"
+                    padding={3}
+                    ellipsis
+                    listening={false}
+                  />
+                )}
               </Group>
             );
           })}
