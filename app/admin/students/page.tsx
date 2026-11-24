@@ -13,6 +13,7 @@ import {
 import {
   Ban,
   CheckCircle2,
+  FileText,
   Pencil,
   Plus,
   Search,
@@ -37,9 +38,22 @@ import {
   getTodayDateString,
   isStudentNextCycleRenewed,
 } from '@/lib/reminders';
-import type { FeeStatus, Student, StudentGender, StudentStatus } from '@/lib/types';
+import type {
+  Booking,
+  FeeStatus,
+  Invoice,
+  Seat,
+  Student,
+  StudentGender,
+  StudentStatus,
+  TimeSlot,
+} from '@/lib/types';
 import { useRemindedToday } from '@/hooks/use-reminded-today';
 import { useAdminAuth } from '@/components/admin/admin-auth-context';
+import {
+  CreateInvoiceDialog,
+  InvoiceViewModal,
+} from '@/components/admin/invoice-modals';
 import { WhatsAppSendButton } from '@/components/admin/whatsapp-send-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -179,6 +193,13 @@ export default function StudentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [seats, setSeats] = useState<Seat[]>([]);
+  const [slots, setSlots] = useState<TimeSlot[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoiceStudentId, setInvoiceStudentId] = useState<string | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+
   const today = useMemo(() => getDefaultExpiryDate(0), []);
   const { remindedIds, markReminded: handleMarkReminded } = useRemindedToday(today);
 
@@ -186,7 +207,7 @@ export default function StudentsPage() {
     if (!user || !adminProfile) return;
 
     const path = 'students';
-    const unsub = onSnapshot(
+    const unsubStudents = onSnapshot(
       collection(db, path),
       (snapshot) => {
         const list = snapshot.docs.map((d) => d.data() as Student);
@@ -208,7 +229,37 @@ export default function StudentsPage() {
       }
     );
 
-    return () => unsub();
+    const unsubBookings = onSnapshot(
+      collection(db, 'bookings'),
+      (snap) => setBookings(snap.docs.map((d) => d.data() as Booking)),
+      () => {}
+    );
+
+    const unsubSeats = onSnapshot(
+      collection(db, 'seats'),
+      (snap) => setSeats(snap.docs.map((d) => d.data() as Seat)),
+      () => {}
+    );
+
+    const unsubSlots = onSnapshot(
+      collection(db, 'time_slots'),
+      (snap) => setSlots(snap.docs.map((d) => d.data() as TimeSlot)),
+      () => {}
+    );
+
+    const unsubInvoices = onSnapshot(
+      collection(db, 'invoices'),
+      (snap) => setInvoices(snap.docs.map((d) => d.data() as Invoice)),
+      () => {}
+    );
+
+    return () => {
+      unsubStudents();
+      unsubBookings();
+      unsubSeats();
+      unsubSlots();
+      unsubInvoices();
+    };
   }, [user, adminProfile]);
 
   const filteredStudents = useMemo(() => {
@@ -761,6 +812,17 @@ export default function StudentsPage() {
                           onReminded={handleMarkReminded}
                         />
                         <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setInvoiceStudentId(student.id)}
+                          className="h-8 px-2.5 text-xs border-[#DDD4CA] bg-[#FDFBF7] text-[#2C2A29] hover:bg-[#F4EFEA] cursor-pointer whitespace-nowrap"
+                          title={`Create invoice for ${student.name}`}
+                        >
+                          <FileText className="size-3.5 mr-1 text-[#D96B4F]" />
+                          Create Invoice
+                        </Button>
+                        <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => openEditModal(student)}
@@ -1148,6 +1210,28 @@ export default function StudentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CreateInvoiceDialog
+        open={Boolean(invoiceStudentId)}
+        onOpenChange={(open) => {
+          if (!open) setInvoiceStudentId(null);
+        }}
+        students={students}
+        bookings={bookings}
+        seats={seats}
+        slots={slots}
+        existingInvoices={invoices}
+        initialStudentId={invoiceStudentId}
+        onCreated={(created) => setViewingInvoice(created)}
+      />
+
+      <InvoiceViewModal
+        invoice={viewingInvoice}
+        open={Boolean(viewingInvoice)}
+        onOpenChange={(open) => {
+          if (!open) setViewingInvoice(null);
+        }}
+      />
     </div>
   );
 }

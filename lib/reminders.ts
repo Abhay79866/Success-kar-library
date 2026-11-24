@@ -1,5 +1,5 @@
-import { getDefaultExpiryDate } from '@/lib/formatters';
-import type { FeeStatus, Student } from '@/lib/types';
+import { formatINR, getDefaultExpiryDate } from '@/lib/formatters';
+import type { Enquiry, FeeStatus, Invoice, Student } from '@/lib/types';
 
 const REMINDED_STORAGE_PREFIX = 'sk_whatsapp_reminded_';
 
@@ -246,4 +246,43 @@ export function buildNextMonthRenewalUpdate(
     lastRemindedDate: '',
   };
 }
+
+export function buildEnquiryFollowUpMessage(enquiry: Pick<Enquiry, 'name'>): string {
+  return `Hello ${enquiry.name}, thank you for visiting Success Kar Library! Please let us know when you would like to reserve your study seat or if you have any questions about our shifts. We look forward to welcoming you!`;
+}
+
+export function buildEnquiryWhatsAppUrl(
+  enquiry: Pick<Enquiry, 'name' | 'phone'>
+): string | null {
+  const formattedPhone = formatWhatsAppPhone(enquiry.phone);
+  if (!formattedPhone) return null;
+  const message = buildEnquiryFollowUpMessage(enquiry);
+  return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+}
+
+export function buildInvoiceWhatsAppMessage(invoice: Invoice): string {
+  const seatShift = [invoice.seatLabel, invoice.shiftLabel]
+    .filter((v) => v && v.trim().length > 0)
+    .join(' · ') || 'Library Membership';
+  const validity = `${formatReadableDate(invoice.validFrom)} to ${formatReadableDate(invoice.validTo)}`;
+  return [
+    `Hello ${invoice.studentName}, thank you for your payment at Success Kar Library!`,
+    ``,
+    `Payment Receipt`,
+    `Invoice No: ${invoice.invoiceNumber}`,
+    `Seat / Shift: ${seatShift}`,
+    `Validity: ${validity}`,
+    `Amount Paid: ${formatINR(invoice.amount)} (${invoice.paymentMode})`,
+    ``,
+    `Thank you and happy studying!`,
+  ].join('\n');
+}
+
+export function buildInvoiceWhatsAppUrl(invoice: Invoice): string | null {
+  const formattedPhone = formatWhatsAppPhone(invoice.studentPhone);
+  if (!formattedPhone) return null;
+  const message = buildInvoiceWhatsAppMessage(invoice);
+  return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+}
+
 

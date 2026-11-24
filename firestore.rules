@@ -148,6 +148,45 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidEnquiry(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'enquiryDate', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'name', 'phone', 'enquiryDate', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 32 &&
+        data.enquiryDate is string && data.enquiryDate.size() == 10 && data.enquiryDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.status in ['new', 'contacted', 'joined'] &&
+        data.createdAt is timestamp &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidInvoice(data) {
+      return data.keys().hasAll(['id', 'invoiceNumber', 'invoiceDate', 'studentName', 'studentPhone', 'validFrom', 'validTo', 'amount', 'paymentMode', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'invoiceNumber', 'invoiceDate', 'studentId', 'studentName', 'studentPhone', 'seatLabel', 'shiftLabel', 'validFrom', 'validTo', 'amount', 'paymentMode', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.invoiceNumber is string && data.invoiceNumber.size() >= 5 && data.invoiceNumber.size() <= 32 &&
+        data.invoiceDate is string && data.invoiceDate.size() == 10 && data.invoiceDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        (!('studentId' in data) || (data.studentId is string && data.studentId.size() <= 128)) &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 120 &&
+        data.studentPhone is string && data.studentPhone.size() >= 5 && data.studentPhone.size() <= 32 &&
+        (!('seatLabel' in data) || (data.seatLabel is string && data.seatLabel.size() <= 64)) &&
+        (!('shiftLabel' in data) || (data.shiftLabel is string && data.shiftLabel.size() <= 64)) &&
+        data.validFrom is string && data.validFrom.size() == 10 && data.validFrom.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.validTo is string && data.validTo.size() == 10 && data.validTo.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.amount is number && data.amount >= 0 && data.amount <= 100000 &&
+        data.paymentMode in ['UPI', 'Cash', 'Bank/Card'] &&
+        data.createdAt is timestamp &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidCounter(data) {
+      return data.keys().hasAll(['id', 'seq', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'seq', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.seq is number && data.seq >= 0 && data.seq <= 10000000 &&
+        data.updatedAt is timestamp;
+    }
+
     // --- Collection Rules ---
     match /admins/{adminId} {
       allow get: if isValidId(adminId) && ((isSignedIn() && request.auth.uid == adminId) || isAdmin());
@@ -287,6 +326,48 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly(['bookingId', 'status', 'updatedAt']);
       allow delete: if isValidId(lockId) && isAdmin();
+    }
+
+    match /enquiries/{enquiryId} {
+      allow get: if isValidId(enquiryId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(enquiryId) && isAdmin() && isValidEnquiry(incoming()) &&
+        incoming().id == enquiryId &&
+        incoming().createdAt == request.time &&
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
+      allow update: if isValidId(enquiryId) && isAdmin() && isValidEnquiry(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'status', 'updatedAt']);
+      allow delete: if isValidId(enquiryId) && isAdmin();
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isValidId(invoiceId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(invoiceId) && isAdmin() && isValidInvoice(incoming()) &&
+        incoming().id == invoiceId &&
+        incoming().createdAt == request.time &&
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
+      allow update: if isValidId(invoiceId) && isAdmin() && isValidInvoice(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().invoiceNumber == existing().invoiceNumber &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(invoiceId) && isAdmin();
+    }
+
+    match /counters/{counterId} {
+      allow get: if isValidId(counterId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(counterId) && isAdmin() && isValidCounter(incoming()) &&
+        incoming().id == counterId &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(counterId) && isAdmin() && isValidCounter(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().updatedAt == request.time;
+      allow delete: if false;
     }
   }
 }

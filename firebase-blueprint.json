@@ -150,6 +150,54 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "bookingId", "seatId", "floorId", "slotId", "bookingDate", "status", "updatedAt"]
+    },
+    "Enquiry": {
+      "title": "Enquiry",
+      "description": "Walk-in or phone visitor enquiry for library membership.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "phone": { "type": "string", "minLength": 5, "maxLength": 32 },
+        "enquiryDate": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "status": { "type": "string", "enum": ["new", "contacted", "joined"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "phone", "enquiryDate", "status", "createdAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Fee receipt invoice issued to a student with sequential INV- number.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "invoiceNumber": { "type": "string", "minLength": 5, "maxLength": 32 },
+        "invoiceDate": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "studentId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "studentName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "studentPhone": { "type": "string", "minLength": 5, "maxLength": 32 },
+        "seatLabel": { "type": "string", "minLength": 0, "maxLength": 64 },
+        "shiftLabel": { "type": "string", "minLength": 0, "maxLength": 64 },
+        "validFrom": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "validTo": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "amount": { "type": "number" },
+        "paymentMode": { "type": "string", "enum": ["UPI", "Cash", "Bank/Card"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "invoiceNumber", "invoiceDate", "studentName", "studentPhone", "validFrom", "validTo", "amount", "paymentMode", "createdAt"]
+    },
+    "Counter": {
+      "title": "Counter",
+      "description": "Sequential counter document for invoice numbering.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "seq": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "seq", "updatedAt"]
     }
   },
   "firestore": {
@@ -184,6 +232,18 @@
     "/booking_locks/{lockId}": {
       "schema": { "$ref": "#/entities/BookingLock" },
       "description": "Atomic seat/slot/date locks preventing double bookings."
+    },
+    "/enquiries/{enquiryId}": {
+      "schema": { "$ref": "#/entities/Enquiry" },
+      "description": "Visitor enquiries logged at the library desk."
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Generated fee receipts and invoices."
+    },
+    "/counters/{counterId}": {
+      "schema": { "$ref": "#/entities/Counter" },
+      "description": "Sequential numbering counters."
     }
   }
 }

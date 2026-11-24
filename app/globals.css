@@ -97,3 +97,24 @@
     text-wrap: balance;
   }
 }
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-invoice-receipt,
+  #printable-invoice-receipt * {
+    visibility: visible !important;
+  }
+  #printable-invoice-receipt {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 32px !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+}

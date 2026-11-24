@@ -96,3 +96,34 @@ export interface Booking {
   createdAt: unknown;
   updatedAt: unknown;
 }
+
+export type EnquiryStatus = 'new' | 'contacted' | 'joined';
+
+export interface Enquiry {
+  id: string;
+  name: string;
+  phone: string;
+  enquiryDate: string; // YYYY-MM-DD
+  status: EnquiryStatus;
+  createdAt: unknown;
+  updatedAt?: unknown;
+}
+
+export type InvoicePaymentMode = 'UPI' | 'Cash' | 'Bank/Card';
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string; // e.g. INV-0001
+  invoiceDate: string; // YYYY-MM-DD
+  studentId?: string;
+  studentName: string;
+  studentPhone: string;
+  seatLabel: string;
+  shiftLabel: string;
+  validFrom: string; // YYYY-MM-DD
+  validTo: string; // YYYY-MM-DD
+  amount: number;
+  paymentMode: InvoicePaymentMode;
+  createdAt: unknown;
+  updatedAt?: unknown;
+}

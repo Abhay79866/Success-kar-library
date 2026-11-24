@@ -9,7 +9,9 @@ import {
   BellRing,
   CalendarCheck,
   CheckCircle2,
+  FileText,
   IndianRupee,
+  MessageSquarePlus,
   Percent,
   Users,
 } from 'lucide-react';
@@ -254,9 +256,27 @@ export default function AdminDashboardPage() {
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <Link href="/admin/book">
-            <Button className="bg-[#D9775B] hover:bg-[#C46348] text-[#FDFBF7] cursor-pointer whitespace-nowrap">
+            <Button className="bg-[#D96B4F] hover:bg-[#C4583D] text-white cursor-pointer whitespace-nowrap">
               <Armchair className="size-4 mr-1.5" />
               Book Seat
+            </Button>
+          </Link>
+          <Link href="/admin/enquiries">
+            <Button
+              variant="outline"
+              className="border-[#DDD4CA] bg-[#FDFBF7] text-[#2C2A29] hover:bg-[#EAE2D9] cursor-pointer whitespace-nowrap"
+            >
+              <MessageSquarePlus className="size-4 mr-1.5 text-[#D96B4F]" />
+              Enquiries
+            </Button>
+          </Link>
+          <Link href="/admin/invoices">
+            <Button
+              variant="outline"
+              className="border-[#DDD4CA] bg-[#FDFBF7] text-[#2C2A29] hover:bg-[#EAE2D9] cursor-pointer whitespace-nowrap"
+            >
+              <FileText className="size-4 mr-1.5 text-[#D96B4F]" />
+              Invoices
             </Button>
           </Link>
           <Link href="/admin/ledger">
