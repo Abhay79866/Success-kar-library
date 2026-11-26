@@ -99,22 +99,45 @@
 }
 
 @media print {
-  body * {
-    visibility: hidden !important;
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
   }
-  #printable-invoice-receipt,
-  #printable-invoice-receipt * {
-    visibility: visible !important;
-  }
-  #printable-invoice-receipt {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 32px !important;
+
+  html,
+  body {
     background: #ffffff !important;
-    border: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body:has(#printable-invoice-receipt-root) > *:not(#printable-invoice-receipt-root) {
+    display: none !important;
+  }
+
+  #printable-invoice-receipt-root {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  #printable-invoice-receipt {
+    position: static !important;
+    width: 100% !important;
+    max-width: 680px !important;
+    margin: 0 auto !important;
+    padding: 28px !important;
+    background: #ffffff !important;
+    border: 1px solid #d8d0c5 !important;
+    border-radius: 12px !important;
     box-shadow: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

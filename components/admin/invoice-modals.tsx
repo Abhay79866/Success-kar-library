@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { MessageCircle, Printer } from 'lucide-react';
 import { toast } from 'sonner';
@@ -538,6 +539,94 @@ function CreateInvoiceForm({
   );
 }
 
+const emptySubscribe = () => () => {};
+
+function InvoiceReceiptCard({
+  invoice,
+  printable = false,
+}: {
+  invoice: Invoice;
+  printable?: boolean;
+}) {
+  return (
+    <div
+      id={printable ? 'printable-invoice-receipt' : undefined}
+      className={cn(
+        'bg-[#FDFBF7] border border-[#E4DDD5] rounded-xl p-6 space-y-5',
+        printable && 'bg-white'
+      )}
+    >
+      <div className="flex items-start justify-between gap-4 border-b border-[#E4DDD5] pb-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-[#6E6762]">
+            Official Fee Receipt
+          </p>
+          <h3 className="font-serif text-2xl font-semibold text-[#2C2A29]">
+            Success Kar Library
+          </h3>
+        </div>
+        <div className="text-right tabular-nums space-y-0.5">
+          <p className="text-sm font-semibold text-[#2C2A29]">
+            {invoice.invoiceNumber}
+          </p>
+          <p className="text-xs text-[#6E6762]">
+            {formatReadableDate(invoice.invoiceDate)}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="space-y-0.5">
+          <p className="text-xs text-[#6E6762]">Student Name</p>
+          <p className="font-medium text-[#2C2A29]">{invoice.studentName}</p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-[#6E6762]">Phone Number</p>
+          <p className="font-medium text-[#2C2A29] tabular-nums">
+            {invoice.studentPhone}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-[#6E6762]">Seat</p>
+          <p className="font-medium text-[#2C2A29]">
+            {invoice.seatLabel || 'General Membership'}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-[#6E6762]">Shift / Plan</p>
+          <p className="font-medium text-[#2C2A29]">
+            {invoice.shiftLabel || 'Monthly Plan'}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-[#6E6762]">Validity Period</p>
+          <p className="font-medium text-[#2C2A29] tabular-nums">
+            {formatReadableDate(invoice.validFrom)} –{' '}
+            {formatReadableDate(invoice.validTo)}
+          </p>
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-xs text-[#6E6762]">Payment Mode</p>
+          <p className="font-medium text-[#2C2A29]">{invoice.paymentMode}</p>
+        </div>
+      </div>
+
+      <div className="bg-[#F4EFEA] border border-[#E4DDD5] rounded-lg px-4 py-3.5 flex items-center justify-between">
+        <span className="text-sm font-medium text-[#2C2A29]">
+          Total Amount Paid
+        </span>
+        <span className="font-serif text-2xl font-semibold text-[#2C2A29] tabular-nums">
+          {formatINR(invoice.amount)}
+        </span>
+      </div>
+
+      <p className="text-xs text-[#6E6762] text-center pt-1">
+        Thank you for studying with Success Kar Library.
+      </p>
+    </div>
+  );
+}
+
 interface InvoiceViewModalProps {
   invoice: Invoice | null;
   open: boolean;
@@ -549,6 +638,12 @@ export function InvoiceViewModal({
   open,
   onOpenChange,
 }: InvoiceViewModalProps) {
+  const isClient = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+
   const handleSendWhatsApp = () => {
     if (!invoice) return;
     const url = buildInvoiceWhatsAppUrl(invoice);
@@ -564,114 +659,58 @@ export function InvoiceViewModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#FAF7F2] border-[#E4DDD5] text-[#2C2A29] sm:max-w-lg max-h-[92vh] overflow-y-auto">
-        <DialogHeader className="print:hidden">
-          <DialogTitle className="font-serif text-xl text-[#2C2A29]">
-            Payment Receipt
-          </DialogTitle>
-          <DialogDescription className="text-[#6E6762]">
-            Print or save as PDF, or share this receipt directly with the student on WhatsApp.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="bg-[#FAF7F2] border-[#E4DDD5] text-[#2C2A29] sm:max-w-lg max-h-[92vh] overflow-y-auto print:hidden">
+          <DialogHeader className="print:hidden">
+            <DialogTitle className="font-serif text-xl text-[#2C2A29]">
+              Payment Receipt
+            </DialogTitle>
+            <DialogDescription className="text-[#6E6762]">
+              Print or save as PDF, or share this receipt directly with the student on WhatsApp.
+            </DialogDescription>
+          </DialogHeader>
 
-        {invoice && (
-          <div className="space-y-5">
-            <div
-              id="printable-invoice-receipt"
-              className="bg-[#FDFBF7] border border-[#E4DDD5] rounded-xl p-6 space-y-5"
-            >
-              <div className="flex items-start justify-between gap-4 border-b border-[#E4DDD5] pb-4">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-[#6E6762]">
-                    Official Fee Receipt
-                  </p>
-                  <h3 className="font-serif text-2xl font-semibold text-[#2C2A29]">
-                    Success Kar Library
-                  </h3>
-                </div>
-                <div className="text-right tabular-nums space-y-0.5">
-                  <p className="text-sm font-semibold text-[#2C2A29]">
-                    {invoice.invoiceNumber}
-                  </p>
-                  <p className="text-xs text-[#6E6762]">
-                    {formatReadableDate(invoice.invoiceDate)}
-                  </p>
-                </div>
+          {invoice && (
+            <div className="space-y-5">
+              <InvoiceReceiptCard invoice={invoice} />
+
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 print:hidden">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePrint}
+                  className="border-[#DDD4CA] bg-[#FDFBF7] text-[#2C2A29] hover:bg-[#F4EFEA] cursor-pointer"
+                >
+                  <Printer className="size-4 mr-1.5" />
+                  Print / Save PDF
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSendWhatsApp}
+                  className="bg-[#16A34A] hover:bg-[#15803D] text-white font-medium cursor-pointer"
+                >
+                  <MessageCircle className="size-4 mr-1.5" />
+                  Send on WhatsApp
+                </Button>
               </div>
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="space-y-0.5">
-                  <p className="text-xs text-[#6E6762]">Student Name</p>
-                  <p className="font-medium text-[#2C2A29]">{invoice.studentName}</p>
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs text-[#6E6762]">Phone Number</p>
-                  <p className="font-medium text-[#2C2A29] tabular-nums">
-                    {invoice.studentPhone}
-                  </p>
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs text-[#6E6762]">Seat</p>
-                  <p className="font-medium text-[#2C2A29]">
-                    {invoice.seatLabel || 'General Membership'}
-                  </p>
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs text-[#6E6762]">Shift / Plan</p>
-                  <p className="font-medium text-[#2C2A29]">
-                    {invoice.shiftLabel || 'Monthly Plan'}
-                  </p>
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs text-[#6E6762]">Validity Period</p>
-                  <p className="font-medium text-[#2C2A29] tabular-nums">
-                    {formatReadableDate(invoice.validFrom)} –{' '}
-                    {formatReadableDate(invoice.validTo)}
-                  </p>
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs text-[#6E6762]">Payment Mode</p>
-                  <p className="font-medium text-[#2C2A29]">{invoice.paymentMode}</p>
-                </div>
-              </div>
-
-              <div className="bg-[#F4EFEA] border border-[#E4DDD5] rounded-lg px-4 py-3.5 flex items-center justify-between">
-                <span className="text-sm font-medium text-[#2C2A29]">
-                  Total Amount Paid
-                </span>
-                <span className="font-serif text-2xl font-semibold text-[#2C2A29] tabular-nums">
-                  {formatINR(invoice.amount)}
-                </span>
-              </div>
-
-              <p className="text-xs text-[#6E6762] text-center pt-1">
-                Thank you for studying with Success Kar Library.
-              </p>
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 print:hidden">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handlePrint}
-                className="border-[#DDD4CA] bg-[#FDFBF7] text-[#2C2A29] hover:bg-[#F4EFEA] cursor-pointer"
-              >
-                <Printer className="size-4 mr-1.5" />
-                Print / Save PDF
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSendWhatsApp}
-                className="bg-[#16A34A] hover:bg-[#15803D] text-white font-medium cursor-pointer"
-              >
-                <MessageCircle className="size-4 mr-1.5" />
-                Send on WhatsApp
-              </Button>
-            </div>
-          </div>
+      {isClient &&
+        open &&
+        invoice &&
+        createPortal(
+          <div
+            id="printable-invoice-receipt-root"
+            className="hidden print:block"
+          >
+            <InvoiceReceiptCard invoice={invoice} printable />
+          </div>,
+          document.body
         )}
-      </DialogContent>
-    </Dialog>
+    </>
   );
 }
